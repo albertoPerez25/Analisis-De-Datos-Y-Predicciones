@@ -1,0 +1,53 @@
+Variable Objetivo (fallo):
+Imbalance: El gráfico 13 ("Distribución de la Variable Objetivo") muestra un claro desbalance: ~76% de casos normales (0) y ~24% de fallos (1). Esto es crucial y debe abordarse en la fase de modelado (usando técnicas como resampling, class weights en los algoritmos, o métricas de evaluación adecuadas como F1-score, Precision, Recall, AUC-PR en lugar de solo Accuracy).
+Predictibilidad: A pesar del desbalance, los demás gráficos indican que SÍ hay patrones claros asociados a los fallos, lo que sugiere que la predicción es factible.
+Variables Temporales (Altamente Prometedoras):
+Hora del Día (hour): El gráfico 2 ("Tasa de Fallo (%) por hour") y el gráfico 6 ("Tasa de Fallo (%) por Hora del Día - Laborable vs FinDeSemana") son reveladores. Existe un patrón diario muy marcado: la tasa de fallo es baja por la noche/madrugada, aumenta drásticamente durante la mañana, alcanza un pico por la tarde (aprox. 13-16h) y vuelve a bajar. Además, este patrón es mucho más pronunciado en días laborables que en fines de semana.
+Implicación: La hora es un predictor muy fuerte. Crear características basadas en la hora (quizás categorizarla en franjas horarias, o usar transformaciones cíclicas como seno/coseno) y diferenciar entre día laborable/fin de semana (como en el gráfico 6) será fundamental.
+Día de la Semana (dayofweek): El gráfico 22 ("Tasa de Fallo (%) por dayofweek") confirma lo visto en el gráfico 6. Los días laborables (especialmente Martes a Viernes) tienen tasas de fallo significativamente más altas que los fines de semana (Sábado, Domingo) y Lunes.
+Implicación: El dayofweek es otro predictor fuerte.
+Mes (month / Estacionalidad): El gráfico 7 ("Número de Fallos Registrados por Mes") muestra una clara estacionalidad, con picos de fallos en ciertos meses (ej. Octubre) y valles en otros (ej. Abril/Mayo).
+Implicación: El mes o alguna variable derivada que capture la estacionalidad será muy útil.
+Año (year): El gráfico 21 ("Tasa de Fallo (%) por year") indica una tendencia decreciente en la tasa de fallos de 2020 a 2021.
+Implicación: Podría haber una tendencia temporal o "concept drift". Incluir el año podría ser útil, aunque con solo dos años es difícil generalizar. Hay que tenerlo en cuenta si el modelo se va a usar a largo plazo.
+Variables Numéricas (Sensores):
+presion (Altamente Prometedora): Consistentemente, en múltiples gráficos (Pairplot-diagonal, Boxplots vs Fallo, Scatterplot Temp vs Presión, Boxplot Presión vs Fallo por Modo Operación), la presion muestra una separación muy clara entre casos normales y de fallo. Los fallos tienden a ocurrir a presiones significativamente más altas.
+Implicación: Probablemente sea uno de los predictores numéricos más importantes.
+temperatura (Prometedora): También muestra una buena separación (Pairplot-diagonal, Boxplots vs Fallo). Los fallos tienden a ocurrir a temperaturas más bajas. Su fuerte correlación negativa con presion (Gráfico 1: Heatmap) es evidente en el scatterplot (Gráfico 3), donde los fallos se agrupan en la zona de baja temperatura / alta presión.
+Implicación: Variable importante, especialmente en conjunto con presion.
+sensor_3 (Prometedora): Similar a temperatura, muestra separación (Pairplot-diagonal, Boxplots vs Fallo), con fallos tendiendo a ocurrir a valores más bajos. Tiene correlaciones moderadas con temperatura y presion.
+Implicación: Variable útil, aunque puede tener cierta redundancia con temperatura y presion.
+sensor_ruido (Menos Prometedora Individualmente): Los gráficos (Pairplot, Boxplots vs Fallo) muestran muy poca o ninguna separación en las distribuciones de sensor_ruido entre casos normales y de fallo. Su correlación con otras variables es casi nula (Heatmap).
+Implicación: Por sí sola, parece aportar poca información predictiva. Podría tener valor en interacciones complejas que un modelo podría capturar, pero es la menos prometedora de las numéricas.
+Variables Categóricas:
+modo_operacion (Altamente Prometedora): El gráfico 20 ("Tasa de Fallo (%) por modo_operacion") muestra diferencias muy significativas: el modo 'manual' tiene la tasa de fallo más alta (~39%), seguido de 'mantenimiento' (~26%) y 'auto' con la más baja (~14%). El gráfico 4 ("Presión vs. Fallo por Modo de Operación") también muestra que la relación entre presion y fallo se mantiene en todos los modos. El gráfico 11 muestra que las condiciones operativas (temp/presión) varían ligeramente según el modo.
+Implicación: Variable categórica muy fuerte. Debe incluirse en el modelo (probablemente mediante one-hot encoding o similar).
+operador (Altamente Prometedora): El gráfico 19 ("Tasa de Fallo (%) por operador") revela grandes diferencias en la tasa de fallo entre operadores. 'E' tiene la tasa más alta (~38%), 'B' la más baja (~11%). Es importante destacar que la categoría 'nan' (Desconocido/missing) también tiene una tasa de fallo específica (~20%), distinta a las demás. El gráfico 17 muestra la distribución (con 'nan' siendo la segunda categoría más frecuente).
+Implicación: Variable categórica muy fuerte. Es crucial manejar adecuadamente los valores faltantes; tratarlos como una categoría separada ('Desconocido') parece razonable dado que tiene su propia tasa de fallo asociada.
+Observaciones Clave Adicionales y Próximos Pasos
+
+Interacciones: El análisis sugiere interacciones importantes:
+temperatura y presion: Su relación es clave y la zona de fallo es específica dentro de esa relación (baja temp, alta presión).
+Variables temporales: hora interactúa con Tipo de Día (laborable/findesemana).
+Variables categóricas y sensores: modo_operacion influye en las condiciones y tasas de fallo (visto con presion).
+Implicación: Modelos capaces de capturar interacciones (como los basados en árboles - Random Forest, Gradient Boosting - o mediante ingeniería de características explícita) probablemente funcionarán bien.
+Consistencia Train/Test: Los gráficos 8, 9 y 10 muestran que las distribuciones de las variables numéricas y las proporciones de las categóricas son muy similares entre los conjuntos de entrenamiento y prueba.
+Implicación: ¡Excelentes noticias! Sugiere que el split es representativo y el modelo entrenado debería generalizar bien al conjunto de test, reduciendo el riesgo de overfitting debido a diferencias en los datos base.
+Distribuciones Numéricas: Los histogramas (Gráfico 15) y boxplots (Gráfico 14) muestran que las variables numéricas tienen distribuciones razonablemente bien comportadas (cercanas a la normal, aunque con outliers).
+Implicación: El preprocesamiento estándar (como StandardScaler) debería ser adecuado. El manejo de outliers debe considerarse (¿son errores o valores extremos válidos?).
+Correlación entre predictores: La alta correlación entre temperatura, presion y sensor_3 (Gráfico 1) indica multicolinealidad.
+Implicación: Modelos como Regresión Logística pueden ser sensibles a esto. Modelos basados en árboles son más robustos. Podría considerarse Feature Engineering (PCA) o selección de características si se usan modelos lineales, aunque a menudo es mejor dejar que los modelos basados en árboles manejen la redundancia.
+Resumen y Recomendaciones para Modelado:
+
+Features a Incluir (Prioridad Alta): hora, dayofweek, month (o derivado estacional), Tipo de Día (laborable/findesemana), presion, temperatura, sensor_3, modo_operacion, operador (con manejo de NaNs).
+Features a Incluir (Prioridad Media/Baja): sensor_ruido (probar incluirlo, pero podría eliminarse si no aporta valor o empeora el modelo), year (considerar si la tendencia es relevante para el objetivo).
+Preprocesamiento:
+Escalar variables numéricas (e.g., StandardScaler).
+Codificar variables categóricas (e.g., OneHotEncoder). Manejar 'nan' en operador como categoría.
+Ingeniería de características: Crear features temporales explícitas (franjas horarias, seno/coseno para hora/mes, flag laborable/findesemana). Considerar interacciones si el modelo no las captura implícitamente.
+Modelado:
+Abordar el desbalance de clases (imprescindible).
+Empezar con modelos robustos que manejen bien interacciones y correlaciones (e.g., Random Forest, Gradient Boosting (XGBoost, LightGBM, CatBoost)).
+Usar métricas de evaluación adecuadas para desbalance: AUC-PR, F1-Score, Recall, Precision.
+Validación cruzada robusta (e.g., StratifiedKFold) para obtener estimaciones fiables del rendimiento.
+Este análisis exhaustivo de los gráficos proporciona una excelente hoja de ruta para la fase de preprocesamiento, ingeniería de características y selección de modelos. ¡Tienes una base muy sólida para construir un modelo predictivo eficaz!
