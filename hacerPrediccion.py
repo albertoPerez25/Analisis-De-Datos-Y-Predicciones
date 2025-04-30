@@ -114,12 +114,6 @@ preprocessor_base_interactions = ColumnTransformer(
     remainder='passthrough' # Mantenemos otras columnas (aunque no debería haber)
 )
 
-# Necesitamos saber cuántas columnas numéricas escaladas hay para aplicar PolyFeatures
-# Esto es un poco más complejo dentro de un pipeline general.
-# Una forma es aplicar PolyFeatures *después* del ColumnTransformer completo.
-# Advertencia: Esto creará interacciones entre dummies categóricas, lo cual no siempre es deseado.
-# Una aproximación más controlada sería crear un pipeline específico.
-
 # Alternativa más simple: Crear un pipeline que incluya PolyFeatures al final
 # Aplicará PolyFeatures a TODO lo que salga del ColumnTransformer (numéricas escaladas + categóricas OHE)
 pipeline_with_poly = Pipeline([
@@ -136,75 +130,46 @@ feature_sets['Todas_Mas_Interacciones'] = {
 print("Definido Set 3: Todas las características + Interacciones Polinómicas (Aplicado a todo post-procesamiento inicial)")
 print("Nota: El Set 3 crea interacciones entre *todas* las variables preprocesadas (incluyendo dummies).")
 
-# --- 6. Definición de Modelos a Probar ---
-models = {
-    "DecisionTree": DecisionTreeClassifier(random_state=42, class_weight='balanced'), # random_state es una semilla para los random. class_weight para desbalanceo aplicando pesos según aparición en cada clase
-    "GaussianNB": GaussianNB(), # No tiene class_weight, más sensible a desbalanceo
-    "RandomForest": RandomForestClassifier(random_state=42, n_estimators=100, class_weight='balanced', n_jobs=-1), # n_estimators es numero de árboles .n_jobs=-1 usa todos los cores
-    "GradientBoosting": GradientBoostingClassifier(random_state=42, n_estimators=100) # GB de sklearn no tiene class_weight directo
-}
+#### Hasta aquí igual que el fichero procesamientoDatos ####
 
-# --- 7. Configuración de Validación Cruzada ---
-n_splits = 5 # Número de folds
-cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
-# Usamos 'f1' como métrica. Para binario es f1 por defecto de la clase positiva (1)
-# Si fuera multiclase o necesitaras otra media, usarías make_scorer(f1_score, average='weighted') por ejemplo.
-scoring_metric = 'f1'
+def gradientBoostingPredict():
+    columns = ['id', 'fallo']
 
-def mejorGradientBoosting():
     set_name = 'Todas_Mas_Interacciones'
     set_config = feature_sets[set_name]
 
-    current_preprocessor = set_config['preprocessor']
+    preprocessor = set_config['preprocessor']
     current_X_train = X_train[set_config['features']].copy()
     current_X_test = X_test[set_config['features']].copy()
 
     model_name = "GradientBoosting"
     model = GradientBoostingClassifier(random_state=42, n_estimators=400)
+    csv_file = model_name+set_name+".csv"
 
-    full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
+    predictToCsv(model, columns, csv_file, preprocessor, current_X_train, y_train, current_X_test);
+
+def randomForestPredict():
+    pass
+
+def naiveBayesPredict():
+    pass
+
+def decisionTreePredict():
+    pass
+
+def predictToCsv(model, model_name, columns, csv_file, preprocessor, X_train, y_train, X_to_predict):
+    full_pipeline = Pipeline(steps=preprocessor.steps + [('model', model)])
 
     print("Ejecutando fit de",model_name,"...")
-    #full_pipeline.fit(current_X_train[:len(current_X_train)//2], y_train[:len(current_X_train)//2])
-    full_pipeline.fit(current_X_train, y_train)
-    #train_score = full_pipeline.score(current_X_train[len(current_X_train)//2:], y_train[len(current_X_train)//2:])
-    test_predict = full_pipeline.predict(current_X_test)
+    full_pipeline.fit(X_train, y_train)
 
-    return test_predict
-
-# Dividir el dataframe en filas, y pasarselas al predict de uno en uno
-# Escribir el resultado del predict en el formato correcto
-# Imprimir por pantalla la estimación de terminación
-
-
-csv_prueba = 'pruebaPredict.csv'
-columns = ['id', 'fallo']
-
-results = pd.DataFrame(columns=columns)
-set_name = 'Todas_Mas_Interacciones'
-set_config = feature_sets[set_name]
-
-current_preprocessor = set_config['preprocessor']
-current_X_train = X_train[set_config['features']].copy()
-current_X_test = X_test[set_config['features']].copy()
-
-model_name = "GradientBoosting"
-model = GradientBoostingClassifier(random_state=42, n_estimators=400)
-
-full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
-
-print("Ejecutando fit de",model_name,"...")
-#full_pipeline.fit(current_X_train[:len(current_X_train)//2], y_train[:len(current_X_train)//2])
-full_pipeline.fit(current_X_train, y_train)
-
+    for i in range(1, len(X_to_predict), 500):
+        test_predict = full_pipeline.predict(X_to_predict[i:i+500])
         
-for i in range(1, len(current_X_test), 500):
-    test_predict = full_pipeline.predict(current_X_test[i:i+500])
+        indi = [j for j in range(i, i+500,1)]
+        valor = [test_predict[k] for k in range(499)]
+
+        results = pd.DataFrame(list(zip(indi,valor)), columns=columns)
+
+        results.to_csv(csv_file, mode='a', header=False, index=False)
     
-
-    indi = [j for j in range(i, i+500,1)]
-    valor = [test_predict[k] for k in range(499)]
-
-    results = pd.DataFrame(list(zip(indi,valor)), columns=columns)
-
-    results.to_csv(csv_prueba, mode='a', header=False, index=False)
