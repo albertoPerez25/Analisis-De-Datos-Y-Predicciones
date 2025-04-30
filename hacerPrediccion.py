@@ -172,9 +172,39 @@ def mejorGradientBoosting():
 
     return test_predict
 
-results = mejorGradientBoosting()
-# --- 9. Presentación de Resultados ---
-print("\n--- Resumen de Resultados ---")
-print(results.data)
+# Dividir el dataframe en filas, y pasarselas al predict de uno en uno
+# Escribir el resultado del predict en el formato correcto
+# Imprimir por pantalla la estimación de terminación
 
-print("\n--- Fin de la Experimentación ---")
+
+csv_prueba = 'pruebaPredict.csv'
+columns = ['id', 'fallo']
+
+results = pd.DataFrame(columns=columns)
+set_name = 'Todas_Mas_Interacciones'
+set_config = feature_sets[set_name]
+
+current_preprocessor = set_config['preprocessor']
+current_X_train = X_train[set_config['features']].copy()
+current_X_test = X_test[set_config['features']].copy()
+
+model_name = "GradientBoosting"
+model = GradientBoostingClassifier(random_state=42, n_estimators=400)
+
+full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
+
+print("Ejecutando fit de",model_name,"...")
+#full_pipeline.fit(current_X_train[:len(current_X_train)//2], y_train[:len(current_X_train)//2])
+full_pipeline.fit(current_X_train, y_train)
+
+        
+for i in range(1, len(current_X_test), 500):
+    test_predict = full_pipeline.predict(current_X_test[i:i+500])
+    
+
+    indi = [j for j in range(i, i+500,1)]
+    valor = [test_predict[k] for k in range(499)]
+
+    results = pd.DataFrame(list(zip(indi,valor)), columns=columns)
+
+    results.to_csv(csv_prueba, mode='a', header=False, index=False)
