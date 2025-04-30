@@ -26,7 +26,7 @@ except FileNotFoundError:
 target = 'fallo'
 
 # Asumimos que las columnas temporales (hora, día, mes) NO están aún creadas.
-# Si tienes una columna de timestamp, deberías extraerlas primero.
+# Si tienes una columna de timestamp, deberías extraerlas primero. Aah pero esto no esta hecho con IA que desis
 numerical_features_base = ['temperatura', 'presion', 'sensor_ruido', 'sensor_3']
 categorical_features_base = ['modo_operacion', 'operador']
 
@@ -41,14 +41,18 @@ print(f"\nCaracterísticas numéricas identificadas: {numerical_features_base}")
 print(f"Características categóricas identificadas: {categorical_features_base}")
 print(f"Variable objetivo: {target}")
 
+
 # Manejo específico de NaNs en 'operador' (según análisis previo)
 # Crea una copia para no modificar el original directamente en cada iteración
 df_processed = df_train.copy()
+'''
+# Redundante porque ya lo hace abajo tambien
 df_processed['operador'] = df_processed['operador'].fillna('Desconocido')
 print("\nValores NaN en 'operador' reemplazados por 'Desconocido'.")
 # Verifica si hay NaNs en otras columnas
 print("\nNaNs restantes:")
 print(df_processed.isnull().sum())
+'''
 
 # Separar X e y
 X = df_processed.drop(target, axis=1)
@@ -57,19 +61,18 @@ y = df_processed[target]
 # --- 4. Definición de Pipelines de Preprocesamiento ---
 
 # Pipeline para variables numéricas:
-# - Imputar NaNs (si los hubiera) con la mediana (más robusto a outliers)
-# - Escalar los datos
+# - Quitar NaNs con la mediana (más robusto a outliers)
 numerical_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='median')),
-    ('scaler', StandardScaler())
+    ('imputer', SimpleImputer(strategy='median'))
 ])
 
 # Pipeline para variables categóricas:
-# - Imputar NaNs (ya hecho para 'operador', pero por si acaso en otras) con una constante
+# - Quitar NaNs con una constante
 # - Aplicar One-Hot Encoding
 categorical_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='constant', fill_value='Missing')), # Por si hay otros NaNs categóricos
-    ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False)) # handle_unknown para robustez en CV
+    ('imputer', SimpleImputer(strategy='constant', fill_value='Desconocido')), # Por si hay otros NaNs categóricos
+    ('onehot', OneHotEncoder()) # (handle_unknown='ignore', sparse_output=False) handle_unknown para robustez en CV
+    # Como no hay demasiada cardinalidad, onehot debería de ser el mejor, pero podemos probar otros
 ])
 
 # --- 5. Definición de Conjuntos de Características (Feature Sets) ---
@@ -117,7 +120,7 @@ print("Definido Set 2: Características prometedoras")
 # Set 3: Todas las originales + Interacciones (Polinómicas de grado 2 solo entre numéricas)
 # Creamos un pipeline que primero preprocesa y luego añade interacciones
 
-# Preprocesador solo para obtener las numéricas escaladas y las categóricas codificadas
+# Preprocesador solo para obtener las numéricas y las categóricas codificadas
 preprocessor_base_interactions = ColumnTransformer(
     transformers=[
         ('num', numerical_transformer, numerical_features_base),
@@ -150,13 +153,10 @@ print("Nota: El Set 3 crea interacciones entre *todas* las variables preprocesad
 
 # --- 6. Definición de Modelos a Probar ---
 models = {
-    "DecisionTree": DecisionTreeClassifier(random_state=42, class_weight='balanced'), # class_weight para desbalanceo
+    "DecisionTree": DecisionTreeClassifier(random_state=42, class_weight='balanced'), # random_state es una semilla para los random. class_weight para desbalanceo aplicando pesos según aparición en cada clase
     "GaussianNB": GaussianNB(), # No tiene class_weight, más sensible a desbalanceo
-    "RandomForest": RandomForestClassifier(random_state=42, n_estimators=100, class_weight='balanced', n_jobs=-1), # n_jobs=-1 usa todos los cores
+    "RandomForest": RandomForestClassifier(random_state=42, n_estimators=100, class_weight='balanced', n_jobs=-1), # n_estimators es numero de árboles .n_jobs=-1 usa todos los cores
     "GradientBoosting": GradientBoostingClassifier(random_state=42, n_estimators=100) # GB de sklearn no tiene class_weight directo
-    # Podrías añadir aquí:
-    # "XGBoost": xgb.XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss', scale_pos_weight=ratio_neg_pos) # scale_pos_weight para desbalanceo
-    # "LightGBM": lgb.LGBMClassifier(random_state=42, class_weight='balanced')
 }
 
 # --- 7. Configuración de Validación Cruzada ---
@@ -167,84 +167,142 @@ cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 scoring_metric = 'f1'
 
 # --- 8. Bucle de Experimentación ---
-results = []
-'''
-INTENTO MIO DE HACER LO QUE HACE GEMINI CON UN SCORE NORMAL (NO VA PORQUE DA ERROR EN MANTENIMIENTO)
+def compararModelos():
+    results = []
+    '''
+    INTENTO MIO DE HACER LO QUE HACE GEMINI CON UN SCORE NORMAL (NO VA PORQUE DA ERROR EN MANTENIMIENTO)
 
-for set_name, set_config in feature_sets.items():
-    print(f"\nEvaluando Feature Set: {set_name}")
-    current_preprocessor = set_config['preprocessor']
-    # Seleccionamos solo las columnas necesarias para este set ANTES de pasarlo al pipeline
-    current_X = X[set_config['features']].copy()
+    for set_name, set_config in feature_sets.items():
+        print(f"\nEvaluando Feature Set: {set_name}")
+        current_preprocessor = set_config['preprocessor']
+        # Seleccionamos solo las columnas necesarias para este set ANTES de pasarlo al pipeline
+        current_X = X[set_config['features']].copy()
 
-    for nombre,modelo in models.items():
-        print(f"\nEvaluando modelo: {nombre}")
-        if isinstance(current_preprocessor, Pipeline): # Caso Set 3
-            # El modelo se añade como último paso al pipeline existente
-            full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', modelo)])
-        else: # Casos Set 1 y Set 2
-            # El preprocesador es un ColumnTransformer
-            full_pipeline = Pipeline(steps=[('preprocess', current_preprocessor),
-                                        ('model', modelo)])
-        modelo.fit(current_X, y)
-        results.append({'Model': nombre, 'Score': modelo.score(current_X, y)})
+        for nombre,modelo in models.items():
+            print(f"\nEvaluando modelo: {nombre}")
+            if isinstance(current_preprocessor, Pipeline): # Caso Set 3
+                # El modelo se añade como último paso al pipeline existente
+                full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', modelo)])
+            else: # Casos Set 1 y Set 2
+                # El preprocesador es un ColumnTransformer
+                full_pipeline = Pipeline(steps=[('preprocess', current_preprocessor),
+                                            ('model', modelo)])
+            modelo.fit(current_X, y)
+            results.append({'Model': nombre, 'Score': modelo.score(current_X, y)})
 
 
-print("\n--- Resultados Iniciales ---",results)
-results = []
-'''
+    print("\n--- Resultados Iniciales ---",results)
+    results = []
+    '''
 
-print(f"\n--- Iniciando Experimentación con {n_splits}-Fold Cross-Validation ---")
-print(f"Métrica de evaluación: {scoring_metric}")
+    print(f"\n--- Iniciando Experimentación con {n_splits}-Fold Cross-Validation ---")
+    print(f"Métrica de evaluación: {scoring_metric}")
 
-'''
-# Lo que habia hecho Gemini: 
-# (Basicamente calcula para cada modelo y para cada configuracion distintos
-# scores con distintos puntos de corte en X para el train y el test, 
-# y procede a hacer la media que es el output)
-'''
-for set_name, set_config in feature_sets.items():
-    print(f"\nEvaluando Feature Set: {set_name}")
-    current_preprocessor = set_config['preprocessor']
-    # Seleccionamos solo las columnas necesarias para este set ANTES de pasarlo al pipeline
-    current_X = X[set_config['features']].copy()
+    '''
+    # Lo que habia hecho Gemini: 
+    # (Basicamente calcula para cada modelo y para cada configuracion distintos
+    # scores con distintos puntos de corte en X para el train y el test, 
+    # y procede a hacer la media que es el output)
+    '''
+    for set_name, set_config in feature_sets.items():
+        print(f"\nEvaluando Feature Set: {set_name}")
+        current_preprocessor = set_config['preprocessor']
+        # Seleccionamos solo las columnas necesarias para este set ANTES de pasarlo al pipeline
+        current_X = X[set_config['features']].copy()
 
-    for model_name, model in models.items():
-        # Crear el pipeline completo: Preprocesador (puede incluir PolyFeatures) + Modelo
-        # Si el preprocesador ya es un pipeline (como en Set 3), esto anida pipelines
-        if isinstance(current_preprocessor, Pipeline): # Caso Set 3
-             # El modelo se añade como último paso al pipeline existente
-             full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
-        else: # Casos Set 1 y Set 2
-             # El preprocesador es un ColumnTransformer
-             full_pipeline = Pipeline(steps=[('preprocess', current_preprocessor),
-                                            ('model', model)])
+        for model_name, model in models.items():
+            # Crear el pipeline completo: Preprocesador (puede incluir PolyFeatures) + Modelo
+            # Si el preprocesador ya es un pipeline (como en Set 3), esto anida pipelines
+            if isinstance(current_preprocessor, Pipeline): # Caso Set 3
+                # El modelo se añade como último paso al pipeline existente
+                full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
+            else: # Casos Set 1 y Set 2
+                # El preprocesador es un ColumnTransformer
+                full_pipeline = Pipeline(steps=[('preprocess', current_preprocessor),
+                                                ('model', model)])
 
-        try:
-            # Realizar Validación Cruzada
-            scores = cross_val_score(full_pipeline, current_X, y,
-                                     cv=cv, scoring=scoring_metric, n_jobs=-1) # n_jobs=-1 usa todos los cores
+            try:
+                # Realizar Validación Cruzada
+                scores = cross_val_score(full_pipeline, current_X, y,
+                                        cv=cv, scoring=scoring_metric, n_jobs=-1) # n_jobs=-1 usa todos los cores
 
-            results.append({
-                'Feature Set': set_name,
-                'Model': model_name,
-                f'Mean {scoring_metric.upper()}': np.mean(scores),
-                f'Std Dev {scoring_metric.upper()}': np.std(scores),
-                'Scores per Fold': scores
-            })
-            print(f"  {model_name}: Mean F1 = {np.mean(scores):.4f} (+/- {np.std(scores):.4f})") # Con formato bonito y todo wow
+                results.append({
+                    'Feature Set': set_name,
+                    'Model': model_name,
+                    f'Mean {scoring_metric.upper()}': np.mean(scores),
+                    f'Std Dev {scoring_metric.upper()}': np.std(scores),
+                    'Scores per Fold': scores
+                })
+                print(f"  {model_name}: Mean F1 = {np.mean(scores):.4f} (+/- {np.std(scores):.4f})") # Con formato bonito y todo wow
 
-        except Exception as e:
-            print(f"  ERROR ejecutando {model_name} con {set_name}: {e}")
-            results.append({
-                'Feature Set': set_name,
-                'Model': model_name,
-                f'Mean {scoring_metric.upper()}': np.nan,
-                f'Std Dev {scoring_metric.upper()}': np.nan,
-                'Scores per Fold': [np.nan] * n_splits
-            })
+            except Exception as e:
+                print(f"  ERROR ejecutando {model_name} con {set_name}: {e}")
+                results.append({
+                    'Feature Set': set_name,
+                    'Model': model_name,
+                    f'Mean {scoring_metric.upper()}': np.nan,
+                    f'Std Dev {scoring_metric.upper()}': np.nan,
+                    'Scores per Fold': [np.nan] * n_splits
+                })
+    return results
             
+def mejorGradientBoosting():
+    results = []
+    set_name = 'Todas_Mas_Interacciones'
+    set_config = feature_sets[set_name]
 
+    current_preprocessor = set_config['preprocessor']
+    current_X = X[set_config['features']].copy()
+
+    model_name = "GradientBoosting"
+    model = GradientBoostingClassifier(random_state=42, n_estimators=400)
+
+    full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
+
+    print("Ejecutando validación cruzada de ",model_name,"...")
+    # Realizar Validación Cruzada
+    scores = cross_val_score(full_pipeline, current_X, y,
+                            cv=cv, scoring=scoring_metric, n_jobs=-1) # n_jobs=-1 usa todos los cores
+
+    results.append({
+        'Feature Set': set_name,
+        'Model': model_name,
+        f'Mean {scoring_metric.upper()}': np.mean(scores),
+        f'Std Dev {scoring_metric.upper()}': np.std(scores),
+        'Scores per Fold': scores
+    })
+
+    return results
+
+def mejorRandomForest():
+    results = []
+    set_name = 'Todas_Mas_Interacciones'
+    set_config = feature_sets[set_name]
+
+    current_preprocessor = set_config['preprocessor']
+    current_X = X[set_config['features']].copy()
+
+    model_name = "RandomForest"
+    model = RandomForestClassifier(random_state=42, n_estimators=550, class_weight='balanced', n_jobs=-1)
+
+    full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
+
+    print("Ejecutando validación cruzada de ",model_name,"...")
+    # Realizar Validación Cruzada
+    scores = cross_val_score(full_pipeline, current_X, y,
+                            cv=cv, scoring=scoring_metric, n_jobs=-1) # n_jobs=-1 usa todos los cores
+
+    results.append({
+        'Feature Set': set_name,
+        'Model': model_name,
+        f'Mean {scoring_metric.upper()}': np.mean(scores),
+        f'Std Dev {scoring_metric.upper()}': np.std(scores),
+        'Scores per Fold': scores
+    })
+
+    return results
+
+results = mejorRandomForest()
 # --- 9. Presentación de Resultados ---
 results_df = pd.DataFrame(results)
 print("\n--- Resumen de Resultados ---")
@@ -253,3 +311,4 @@ results_df = results_df.sort_values(by=f'Mean {scoring_metric.upper()}', ascendi
 print(results_df[[ 'Feature Set', 'Model', f'Mean {scoring_metric.upper()}', f'Std Dev {scoring_metric.upper()}']])
 
 print("\n--- Fin de la Experimentación ---")
+
