@@ -247,7 +247,6 @@ def compararModelos():
     return results
             
 def mejorGradientBoosting():
-    results = []
     set_name = 'Todas_Mas_Interacciones'
     set_config = feature_sets[set_name]
 
@@ -259,23 +258,9 @@ def mejorGradientBoosting():
 
     full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
 
-    print("Ejecutando validación cruzada de",model_name,"...")
-    # Realizar Validación Cruzada
-    scores = cross_val_score(full_pipeline, current_X, y,
-                            cv=cv, scoring=scoring_metric, n_jobs=-1) # n_jobs=-1 usa todos los cores
-
-    results.append({
-        'Feature Set': set_name,
-        'Model': model_name,
-        f'Mean {scoring_metric.upper()}': np.mean(scores),
-        f'Std Dev {scoring_metric.upper()}': np.std(scores),
-        'Scores per Fold': scores
-    })
-
-    return results
+    return validacionCruzada(model_name,full_pipeline,current_X, set_name)
 
 def mejorRandomForest():
-    results = []
     set_name = 'Todas_Mas_Interacciones'
     set_config = feature_sets[set_name]
 
@@ -287,9 +272,13 @@ def mejorRandomForest():
 
     full_pipeline = Pipeline(steps=current_preprocessor.steps + [('model', model)])
 
+    return validacionCruzada(model_name,full_pipeline,current_X, set_name)
+
+def validacionCruzada(model_name,pipeline,X,set_name):
+    results = []
     print("Ejecutando validación cruzada de",model_name,"...")
     # Realizar Validación Cruzada
-    scores = cross_val_score(full_pipeline, current_X, y,
+    scores = cross_val_score(pipeline, X, y,
                             cv=cv, scoring=scoring_metric, n_jobs=-1) # n_jobs=-1 usa todos los cores
 
     results.append({
@@ -302,7 +291,8 @@ def mejorRandomForest():
 
     return results
 
-results = mejorRandomForest()
+results = mejorGradientBoosting()
+print(results)
 # --- 9. Presentación de Resultados ---
 results_df = pd.DataFrame(results)
 print("\n--- Resumen de Resultados ---")

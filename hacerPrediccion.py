@@ -163,11 +163,11 @@ def predictToCsv(model, model_name, columns, csv_file, preprocessor, X_train, y_
     print("Ejecutando fit de",model_name,"...")
     full_pipeline.fit(X_train, y_train)
 
-    for i in range(1, len(X_to_predict), 500):
+    for i in range(0, len(X_to_predict), 500):
         test_predict = full_pipeline.predict(X_to_predict[i:i+500])
         
         indi = [j for j in range(i, i+500,1)]
-        valor = [test_predict[k] for k in range(499)]
+        valor = [test_predict[k] for k in range(500)]
 
         results = pd.DataFrame(list(zip(indi,valor)), columns=columns)
 
