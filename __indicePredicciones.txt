@@ -1,0 +1,4 @@
+Prueba01 --> GradientBoosting Todas_Mas_Iteraciones
+Prueba02 --> RandomForest Todas_Mas_Iteraciones
+Prueba03 --> ArbolDecision Prometedoras
+Prueba04 --> NaiveBayes Prometedoras
