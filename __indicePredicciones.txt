@@ -5,3 +5,8 @@ Prueba04 --> NaiveBayes Prometedoras
 Prueba05 --> NaiveBayes Basica NUEVA IMPLEMENTACION
 Prueba06 --> XGBoost Reducida Acotada
 Prueba07 --> RandomForest Reducida NUEVA IMPLEMENTACION
+Prueba08 --> Prueba03 SOY TONTO
+Prueba09 --> GradientBoosting Basico NUEVA IMPLEMENTACION
+Prueba10 --> CatBoost Reducid
+Prueba11 --> Ensemble XG, Light, Cat
+Prueba12 --> CatBoost Reducido 696969
